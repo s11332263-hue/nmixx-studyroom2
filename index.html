@@ -23,7 +23,10 @@
         .timer-btn { background: #333; border: none; color: white; padding: 4px 10px; border-radius: 15px; font-size: 12px; cursor: pointer; }
         .timer-select { background: #222; color: white; border: 1px solid #444; border-radius: 4px; font-size: 12px; padding: 2px; }
         .video-box { flex: 1; position: relative; background: #141414; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
-        .video-box iframe { width: 100%; height: 100%; border: none; object-fit: cover; }
+        
+        /* 🌟 核心：改回高效能的原生 HTML5 影片標籤 🌟 */
+        video.idol-video { width: 100%; height: 100%; object-fit: cover; }
+        
         .member-picker-pop { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(24, 24, 28, 0.95); border: 1px solid rgba(255,255,255,0.15); border-radius: 14px; padding: 16px; width: 280px; display: none; flex-direction: column; gap: 12px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); backdrop-filter: blur(15px); z-index: 200; }
         .picker-header { font-size: 12px; color: #747678; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px; }
         .picker-row { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
@@ -100,7 +103,7 @@
         
         <div class="container">
             <div class="video-box">
-                <iframe id="idol-iframe" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+                <video id="idol-video" class="idol-video" loop playsinline></video>
                 <div class="zoom-name-tag">
                     <img id="idol-tag-mic" class="mic-icon-active" src="https://raw.githubusercontent.com/FortAwesome/Font-Awesome/master/svgs/solid/microphone.svg">
                     <span id="idol-tag-name">IDOL</span>
@@ -159,4 +162,258 @@
         let countdownTimer = null, timeLeft = 1500, isTimerRunning = false, lastUserActionTime = Date.now(), checkJealousyInterval = null;
         let isSwitchingProcess = false; 
 
-        function selectIdol(id)
+        function selectIdol(id) {
+            selectedIdol = id;
+            document.querySelectorAll('.login-box .idol-card').forEach(c => c.classList.remove('selected'));
+            document.getElementById(`card-${id}`).classList.add('selected');
+        }
+
+        function toggleMemberPickerMenu() {
+            resetActionTimer(); isPickerOpen = !isPickerOpen;
+            document.getElementById('member-picker-pop').style.display = isPickerOpen ? 'flex' : 'none';
+            document.getElementById('btn-switch').className = isPickerOpen ? "icon active" : "icon";
+        }
+
+        function clickIdolFromMenu(targetId) {
+            if (selectedIdol === targetId || isSwitchingProcess) return;
+            isSwitchingProcess = true; resetActionTimer(); toggleMemberPickerMenu();
+
+            let pool = getIdolReplies(userName);
+            let switchJealousyMsg = pool.switchJealousy[Math.floor(Math.random() * pool.switchJealousy.length)];
+            
+            let box = document.getElementById('chat-messages');
+            let ind = document.getElementById('typing-indicator');
+            ind.innerText = `${idolDisplayName} 正在輸入...`; ind.style.display = "block"; box.scrollTop = box.scrollHeight;
+
+            setTimeout(() => {
+                ind.style.display = "none";
+                box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="msg-meta idol">${idolDisplayName}</div><div class="msg-text idol-text" style="background: rgba(224, 40, 40, 0.15); border: 1px solid #e02828;">${switchJealousyMsg}</div></div>`);
+                box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="msg-meta" style="color: #e02828;">系統通訊</div><div class="msg-text" style="color: #ff8b8b; font-style: italic;">警告：連線端情緒劇烈波動！正在移轉線路至下一個房間...</div></div>`);
+                box.scrollTop = box.scrollHeight;
+
+                setTimeout(() => {
+                    executeActualSwitch(targetId); isSwitchingProcess = false;
+                }, 1500);
+            }, 2500);
+        }
+
+        function executeActualSwitch(id) {
+            selectedIdol = id; let pool = getIdolReplies(userName); idolDisplayName = pool.displayName;
+
+            // 🌟 核心：吃回本機影片路徑 🌟
+            let v = document.getElementById('idol-video');
+            v.src = pool.videoSrc;
+
+            document.getElementById('idol-tag-name').innerText = idolDisplayName;
+            document.getElementById('typing-idol-name').innerText = idolDisplayName;
+
+            document.querySelectorAll('.picker-row').forEach(row => row.classList.remove('current'));
+            document.getElementById('status-text-sullyoon').innerText = ""; document.getElementById('status-text-jiwoo').innerText = "";
+            document.getElementById(`picker-row-${id}`).classList.add('current'); document.getElementById(`status-text-${id}`).innerText = "通話中";
+
+            v.play().catch(() => { v.muted = true; v.play(); });
+
+            setTimeout(() => {
+                let randomHello = pool.hello[Math.floor(Math.random() * pool.hello.length)];
+                triggerIdolSpecificReply(randomHello);
+            }, 800);
+        }
+
+        function getIdolReplies(name) {
+            return {
+                sullyoon: {
+                    displayName: "설유니 ‧ 0 ‧", 
+                    videoSrc: "idol.mp4", // 薛侖本地影片檔
+                    switchJealousy: [
+                        `等一下... ${name}，妳的手指剛剛點了哪裡？妳現在是要當著我的面，把我換成智友嗎...？(｡•́__•̀｡)`,
+                        `是我今天表現得不夠溫柔嗎？還是 ${name} 已經看膩姐姐的臉了...？妳怎麼可以這樣對我啦 😭`,
+                        `呀！不准按那個按鈕！我都陪妳自習了，妳心裡竟然還在想別人...姐姐真的要生氣了喔！`
+                    ],
+                    hello: [
+                        `啊，${name}！(｡♥‿♥｡) 姐姐剛才一直想著妳呢，今天也要緊緊黏著我喔 (•͈⌔•͈⑅)`,
+                        `哈囉我的 ${name}～ 看到妳上線，姐姐心跳突然跳得好快喔...`
+                    ],
+                    tired: [`唔... ${name} 累了嗎？姐姐抱一個！再陪我堅持一下下嘛 (ˊᗨˋ)`],
+                    love: [`天啊... 突然告白，我整張臉都要燒起來了啦 (灬ºωº灬) 姐姐也最喜歡妳了！`],
+                    default: [`我在聽喔，${name} 累了要跟姐姐說，我會一直在螢幕這端陪著妳的 (ˊᗨˋ)✨`],
+                    timerStart: [`大戰開始囉！不准看別的地方，只能看書和看姐姐喔 ( • ̀ω•́ )✧`],
+                    timerPause: [`欸～怎麼按暫停了？被姐姐抓到的人要被彈額頭喔！`],
+                    timerComplete: [`哇寶貝妳太棒了！居然真的堅持完了，快休息一下，姐姐獎勵妳一個擁抱！`],
+                    micOn: [`哇～聽得到妳的聲音了 (•͈⌔•͈⑅) 讓姐姐多聽一點嘛～`],
+                    micOff: [`欸～${name} 怎麼又靜音了 (｡•́__•̀｡) 那姐姐乖乖在這邊看著妳喔 (ˊᗨˋ)`],
+                    camOn: [`啊！看見妳了！(｡♥‿♥｡) ${name} 今天也超級超級好看的！`],
+                    camOff: [`嗚哇... 妳怎麼把鏡頭關掉了啦 (´•̥̥̥ω•̥̥̥\`) 快點打開嘛...`],
+                    jealousy: [`唔... ${name} 怎麼突然不說話了？是不是書本比姐姐還要好看呀...`]
+                },
+                jiwoo: {
+                    displayName: "마이쥬 ‧ᴥ‧", 
+                    videoSrc: "jiwoo.mp4", // 智友本地影片檔
+                    switchJealousy: [
+                        `嗚哇！${name} 妳現在是在幹嘛？！妳點那個頭貼是要連去薛侖姐姐那裡嗎？不可以！不准拋棄我！`,
+                        `好過分... 姐姐今天為了陪妳，私底下背台詞背了超久，結果妳現在居然在名單裡選別人...哼！`,
+                        `不准切斷線路！( 🐾 ) 妳看著我的眼睛！難道我剛才的撒嬌不夠賣力嗎？不准走！`
+                    ],
+                    hello: [
+                        `哈囉～${name}！妳終於來了！嘿嘿，智友姐姐等妳好久了～`,
+                        `${name}～嗨！一看到妳上線，姐姐今天獨自練舞的疲憊感瞬間全不見了！🐾`
+                    ],
+                    tired: [`唔... ${name} 累了嗎？不要氣餒！來，把頭湊過來，智友姐姐給妳揉揉頭、滿血充電！`],
+                    love: [`哇慢著！突襲告白 Medina！😳 雖然我是姐姐，但我的心早就完全被妳抓走啦！`],
+                    default: [`嗯點！智友姐姐一直在這盯著妳喔 (ˊᗨˋ)✨ 看到妳這麼認真，姐姐多努力都是對的！`],
+                    timerStart: [`定好計時囉！接下來是專注時間。${name} 也一定可以戰勝題目，加油！`],
+                    timerPause: [`欸～怎麼按暫停了？難道是看姐姐太可愛所以分心了嗎？🤭`],
+                    timerComplete: [`叮咚！時間到！🎉 姐姐就知道妳是最棒的。快點休息，姐姐給妳大大的擁抱！`],
+                    micOn: [`哇～聽到聲音了 (•͈⌔•͈⑅) 妳寫字沙沙沙的聲音讓姐姐好幸福喔！`],
+                    micOff: [`關掉麥克風了呀？🤫 那姐姐會乖乖坐在這盯著妳，不吵妳喔！`],
+                    camOn: [`看見妳了！(｡♥‿♥｡) ${name} 認真的樣子真的太迷人了。姐姐整個人都滿血復活了！`],
+                    camOff: [`嗚哇... 妳怎麼把鏡頭關掉了 (´•̥̥̥ω•̥̥̥\`) 是不是嫌姐姐太黏人不想看我了？`],
+                    jealousy: [`哼哼... ${name} (｡•́__•̀｡) 妳已經整整兩分鐘沒理姐姐了喔... 快看看我嘛～`]
+                }
+            }[selectedIdol];
+        }
+
+        function joinMeeting() {
+            const inputName = document.getElementById('user-name-input').value.trim();
+            userName = inputName || "樹懶";
+            document.getElementById('chat-panel').className = "chat-panel open";
+            
+            let pool = getIdolReplies(userName); idolDisplayName = pool.displayName;
+            
+            let v = document.getElementById('idol-video');
+            v.src = pool.videoSrc;
+            
+            document.getElementById('idol-tag-name').innerText = idolDisplayName;
+            document.getElementById('typing-idol-name').innerText = idolDisplayName;
+            document.getElementById('my-tag-name').innerText = userName;
+            document.getElementById('avatar').innerText = userName.charAt(0);
+            document.getElementById('system-welcome-msg').innerHTML = `<div class="msg-meta">系統通知</div><div class="msg-text" style="color: #a1a1a5; font-style: italic;">歡迎 ${userName} 入會！請點擊下方的「雙人圖示」開啟成員選單視窗。</div>`;
+            document.getElementById('login-overlay').style.display = 'none';
+            
+            v.play().catch(() => { v.muted = true; v.play(); });
+            
+            startJealousyChecker(); initDevices();
+        }
+
+        function startJealousyChecker() {
+            if(checkJealousyInterval) clearInterval(checkJealousyInterval);
+            checkJealousyInterval = setInterval(() => {
+                if (Date.now() - lastUserActionTime >= 120000) {
+                    const pool = getIdolReplies(userName);
+                    let r = pool.jealousy[Math.floor(Math.random() * pool.jealousy.length)];
+                    triggerIdolSpecificReply(r); lastUserActionTime = Date.now();
+                }
+            }, 5000);
+        }
+        function resetActionTimer() { lastUserActionTime = Date.now(); }
+
+        async function initDevices() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localStream.getVideoTracks()[0].enabled = false; localStream.getAudioTracks()[0].enabled = false;
+                document.getElementById('webcam').srcObject = localStream;
+                setupMyAudio(localStream);
+            } catch (error) { 
+                document.getElementById('btn-mic').classList.remove('disabled'); document.getElementById('btn-cam').classList.remove('disabled');
+            }
+        }
+
+        document.getElementById('timer-duration').addEventListener('change', function() { resetActionTimer(); timeLeft = parseInt(this.value); updateTimerDisplay(); });
+        function toggleTimerPanel() { resetActionTimer(); isTimerOpen = !isTimerOpen; document.getElementById('timer-overlay').style.display = isTimerOpen ? "flex" : "none"; }
+        function toggleTimer() {
+            resetActionTimer(); let pool = getIdolReplies(userName);
+            if (!isTimerRunning) {
+                isTimerRunning = true; document.getElementById('timer-control-btn').innerText = "暫停";
+                triggerIdolSpecificReply(pool.timerStart[0]);
+                countdownTimer = setInterval(() => {
+                    timeLeft--; updateTimerDisplay();
+                    if (timeLeft <= 0) {
+                        clearInterval(countdownTimer); countdownTimer = null; isTimerRunning = false;
+                        document.getElementById('timer-control-btn').innerText = "開始";
+                        triggerIdolSpecificReply(pool.timerComplete[0]);
+                    }
+                }, 1000);
+            } else {
+                clearInterval(countdownTimer); isTimerRunning = false; document.getElementById('timer-control-btn').innerText = "繼續";
+                triggerIdolSpecificReply(pool.timerPause[0]);
+            }
+        }
+        function updateTimerDisplay() {
+            let m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+            let s = (timeLeft % 60).toString().padStart(2, '0');
+            document.getElementById('timer-display').innerText = `${m}:${s}`;
+        }
+
+        function toggleMic() {
+            resetActionTimer(); isMicActive = !isMicActive;
+            if (localStream && localStream.getAudioTracks()[0]) { localStream.getAudioTracks()[0].enabled = isMicActive; }
+            let b = document.getElementById('btn-mic'); let pool = getIdolReplies(userName);
+            if (isMicActive) {
+                b.className = "icon active"; b.querySelector('img').src = "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/master/svgs/solid/microphone.svg";
+                document.getElementById('my-tag-name').innerText = userName; triggerIdolSpecificReply(pool.micOn[0]);
+            } else {
+                b.className = "icon disabled"; b.querySelector('img').src = "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/master/svgs/solid/microphone-slash.svg";
+                document.getElementById('my-tag-name').innerText = userName + " (Muted)"; triggerIdolSpecificReply(pool.micOff[0]);
+            }
+        }
+
+        function toggleCam() {
+            resetActionTimer(); isCamActive = !isCamActive;
+            if (localStream && localStream.getVideoTracks()[0]) { localStream.getVideoTracks()[0].enabled = isCamActive; }
+            let b = document.getElementById('btn-cam'); let pool = getIdolReplies(userName);
+            if (isCamActive) {
+                b.className = "icon active"; b.querySelector('img').src = "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/master/svgs/solid/video.svg";
+                document.getElementById('webcam').style.display = "block"; document.getElementById('avatar').style.display = "none";
+                triggerIdolSpecificReply(pool.camOn[0]);
+            } else {
+                b.className = "icon disabled"; b.querySelector('img').src = "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/master/svgs/solid/video-slash.svg";
+                document.getElementById('webcam').style.display = "none"; document.getElementById('avatar').style.display = "flex";
+                triggerIdolSpecificReply(pool.camOff[0]);
+            }
+        }
+
+        function toggleChat() { resetActionTimer(); isChatOpen = !isChatOpen; document.getElementById('chat-panel').className = isChatOpen ? "chat-panel open" : "chat-panel"; document.getElementById('chat-red-dot').style.display = 'none'; }
+
+        function triggerIdolSpecificReply(text) {
+            let box = document.getElementById('chat-messages'); let ind = document.getElementById('typing-indicator');
+            ind.innerText = `${idolDisplayName} 正在輸入...`; ind.style.display = "block"; box.scrollTop = box.scrollHeight;
+            setTimeout(() => {
+                ind.style.display = "none";
+                box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="msg-meta idol">${idolDisplayName}</div><div class="msg-text idol-text">${text}</div></div>`);
+                box.scrollTop = box.scrollHeight;
+                if (!isChatOpen) { document.getElementById('chat-red-dot').style.display = 'block'; }
+            }, 3000);
+        }
+
+        function sendChatMessage() {
+            resetActionTimer();
+            let input = document.getElementById('chat-input'); let text = input.value.trim(); if (text === "") return;
+            let box = document.getElementById('chat-messages');
+            box.insertAdjacentHTML('beforeend', `<div class="msg"><div class="msg-meta">${userName}</div><div class="msg-text">${text}</div></div>`);
+            input.value = ""; box.scrollTop = box.scrollHeight;
+            
+            let pool = getIdolReplies(userName); let replyPool = pool.default;
+            if (text.includes("嗨") || text.includes("安") || text.includes("哈囉")) replyPool = pool.hello;
+            else if (text.includes("累") || text.includes("難") || text.includes("睡") || text.includes("不想讀")) replyPool = pool.tired;
+            else if (text.includes("愛") || text.includes("喜歡") || text.includes("嫁")) replyPool = pool.love;
+            
+            let randomReply = replyPool[Math.floor(Math.random() * replyPool.length)];
+            triggerIdolSpecificReply(randomReply);
+        }
+
+        function setupMyAudio(stream) {
+            myAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); myAnalyser = myAudioCtx.createAnalyser();
+            const source = myAudioCtx.createMediaStreamSource(stream); myAnalyser.fftSize = 256; source.connect(myAnalyser);
+            const dataArray = new Uint8Array(myAnalyser.frequencyBinCount); const tagMicImg = document.getElementById('my-tag-mic');
+            function checkMyVolume() {
+                requestAnimationFrame(checkMyVolume); if (!isMicActive) return; myAnalyser.getByteFrequencyData(dataArray);
+                let total = 0; for (let i = 0; i < dataArray.length; i++) total += dataArray[i]; let average = total / dataArray.length;
+                if (average > 10) {
+                    let brightness = 1 + (average / 30); let glow = average / 5;
+                    tagMicImg.style.filter = `invert(53%) sepia(87%) saturate(541%) hue-rotate(91deg) brightness(${brightness}) drop-shadow(0px 0px ${glow}px #23d160)`;
+                } else { tagMicImg.style.filter = "invert(1) drop-shadow(0px 0px 0px transparent)"; }
+            }
+            checkMyVolume();
+        }
+    </script>
+</body>
+</html>
